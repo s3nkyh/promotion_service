@@ -40,6 +40,10 @@ public class PromotionService {
         return promotion;
     }
 
+    public void some () {
+
+    }
+
     private PaymentRequest paymentRequestBuilder (BigDecimal amount) {
         return PaymentRequest.builder()
                 .paymentNumber(1)
