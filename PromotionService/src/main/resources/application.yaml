@@ -1,0 +1,40 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: user
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  kafka:
+    producer:
+      bootstrap-servers: localhost:9092
+      acks: all
+      retries: 3
+      enable-idempotence: false
+
+    topics:
+      promotion:
+        payment:
+          payment-promotion-topic: payment-promotion-topic
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+server:
+  port: 8079
+
+payment-service:
+  host: localhost
+  port: 9080
+
+user-service:
+  host: localhost
+  port: 8080
