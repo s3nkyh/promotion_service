@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 @Slf4j
 @Service
-public class KafkaPaymentPublisher {
+public class KafkaPaymentRequestPublisher {
     public static final String FAILED_SERIALIZING_OBJECT = "Failed to serialize object";
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
@@ -23,6 +23,6 @@ public class KafkaPaymentPublisher {
             log.error("Serialization error for object: {}", object, e);
             throw new RuntimeException(FAILED_SERIALIZING_OBJECT, e);
         }
-        log.info("Sent object: {}, to topic: {}", object.getClass().getName(), topic);
+        log.info("Sent object: {}, to topic: {}", object.toString(), topic);
     }
 }

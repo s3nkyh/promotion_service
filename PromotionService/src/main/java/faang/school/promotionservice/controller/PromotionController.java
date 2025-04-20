@@ -20,4 +20,9 @@ public class PromotionController {
     public Promotion buyPromotion(@RequestBody RequestPromotionDto requestPromotionDto) {
         return promotionService.buy(requestPromotionDto);
     }
+
+    @PostMapping("/kafka")
+    public void testKafka() {
+        promotionService.testKafka();
+    }
 }
