@@ -26,6 +26,7 @@ spring:
     topics:
       promotion-payment-request: "promotion-payment-request"
       promotion-payment-response: "promotion-payment-response"
+      promotion-notification-topic: "promotion-notification-topic"
     group-id:
       payment-promotion-group-id: "payment-promotion-group"
 

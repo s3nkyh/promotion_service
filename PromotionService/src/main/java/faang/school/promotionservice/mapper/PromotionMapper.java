@@ -7,11 +7,11 @@ import faang.school.promotionservice.entity.TargetType;
 import org.mapstruct.Mapper;
 
 @Mapper(componentModel = "spring")
-public interface TariffMapper {
+public interface PromotionMapper {
 
-    PromotionDto toTariffDto(Promotion promotion);
+    PromotionDto toPromotionDto(Promotion promotion);
 
-    Promotion toTariff(PromotionDto promotionDto);
+    Promotion toPromotion(PromotionDto promotionDto);
 
     default TargetTypeDto targetTypeToDto(TargetType targetType) {
         if (targetType == null) {

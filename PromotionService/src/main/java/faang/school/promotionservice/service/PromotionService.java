@@ -1,30 +1,26 @@
 package faang.school.promotionservice.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import faang.school.promotionservice.client.UserServiceClient;
 import faang.school.promotionservice.dto.Currency;
 import faang.school.promotionservice.dto.payment.PaymentRequest;
 import faang.school.promotionservice.dto.payment.PaymentResponse;
-import faang.school.promotionservice.dto.promotion.PaymentStatus;
-import faang.school.promotionservice.dto.promotion.RequestPromotionDto;
+import faang.school.promotionservice.dto.promotion.*;
 import faang.school.promotionservice.entity.Promotion;
-import faang.school.promotionservice.exception.PaymentFailedException;
 import faang.school.promotionservice.exception.TariffPriceMismatchException;
-import faang.school.promotionservice.repository.TariffRepository;
+import faang.school.promotionservice.exception.UserNotFoundException;
+import faang.school.promotionservice.mapper.PromotionMapper;
+import faang.school.promotionservice.repository.PromotionRepository;
+import faang.school.promotionservice.service.listener.KafkaPaymentResponseListener;
+import faang.school.promotionservice.service.publisher.KafkaEventPublisher;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.requestreply.ReplyingKafkaTemplate;
-import org.springframework.kafka.requestreply.RequestReplyMessageFuture;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -34,88 +30,60 @@ import java.util.concurrent.TimeoutException;
 @RequiredArgsConstructor
 public class PromotionService {
     public static final String TARIFF_PRICE_MISMATCH = "Payment amount does not match the tariff price";
-    private final ReplyingKafkaTemplate<String, String, String> replyingKafkaTemplate;
-    private final ObjectMapper objectMapper;
-    private final TariffRepository tariffRepository;
+    public static final String USER_NOT_FOUND = "It looks like you haven't registered." +
+            " Please register and continue paying again.";
+    private final KafkaEventPublisher kafkaEventPublisher;
+    private final KafkaPaymentResponseListener kafkaPaymentResponseListener;
+    private final PromotionRepository promotionRepository;
+    private final PromotionMapper promotionMapper;
     private final UserServiceClient userServiceClient;
 
     @Value("${spring.kafka.topics.promotion-payment-request}")
     private String promotionPaymentRequestTopic;
 
-    public Promotion buy(RequestPromotionDto requestPromotionDto) {
-        Promotion promotion = tariffRepository.findById(requestPromotionDto.getPromotionId()).get();
-        userServiceClient.isExists(requestPromotionDto.getUserId());
+    @Value("${spring.kafka.topics.promotion-notification-topic}")
+    private String promotionNotificationTopic;
+
+    @Transactional
+    public PromotionDto buy(RequestPromotionDto requestPromotionDto) {
+        Promotion promotion = promotionRepository.findById(requestPromotionDto.getPromotionId()).get();
+        if (!userServiceClient.isExists(requestPromotionDto.getUserId())) {
+            log.info("User not found");
+            throw new UserNotFoundException(USER_NOT_FOUND);
+        }
         validatePrice(promotion.getUsdPrice(), requestPromotionDto.getAmount());
 
         PaymentRequest paymentRequest = paymentRequestBuilder(requestPromotionDto.getAmount());
-        try {
-            String requestJson = objectMapper.writeValueAsString(paymentRequest);
-            String correlationId = UUID.randomUUID().toString();
 
-            Message<String> requestMessage = MessageBuilder
-                    .withPayload(requestJson)
-                    .setHeader(KafkaHeaders.TOPIC, promotionPaymentRequestTopic)
-                    .setHeader(KafkaHeaders.CORRELATION_ID, correlationId.getBytes(StandardCharsets.UTF_8))
-                    .setHeader(KafkaHeaders.REPLY_TOPIC, promotionPaymentRequestTopic)
-                    .build();
+        CompletableFuture<PaymentResponse> responseFuture =
+                kafkaPaymentResponseListener.registerPendingRequest(paymentRequest.requestId());
+        kafkaEventPublisher.publishEvent(promotionPaymentRequestTopic, paymentRequest);
 
-            RequestReplyMessageFuture<String, String> future =
-                    replyingKafkaTemplate.sendAndReceive(requestMessage);
+        processPaymentAndVerify(responseFuture, paymentRequest, requestPromotionDto.getUserId());
+        kafkaEventPublisher.publishEvent(promotionNotificationTopic,
+                createSuccessPromotionEvent(requestPromotionDto.getUserId(), promotion.getName())); // доавбить Listener в NotificationService
 
-            log.info("Sent message with correlationId: {}", correlationId);
 
-            @SuppressWarnings("unchecked")
-            Message<String> replyMessage = (Message<String>) future.get(10, TimeUnit.SECONDS);
-            String responseJson = replyMessage.getPayload();
-            PaymentResponse paymentResponse = objectMapper.readValue(responseJson, PaymentResponse.class);
-
-            if (!paymentResponse.status().equals(PaymentStatus.SUCCESS)) {
-                String errorMsg = String.format("Payment failed for promotion %s. Status: %s, Reason: %s",
-                        requestPromotionDto.getPromotionId(),
-                        paymentResponse.status()
-                );
-
-                log.error("Payment processing failed: {}", errorMsg);
-                throw new PaymentFailedException(errorMsg);
-            }
-            log.info("Received response: {}", paymentResponse);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        } catch (ExecutionException | InterruptedException | TimeoutException e) {
-            throw new RuntimeException(e);
-        }
-
-        return promotion;
+        return promotionMapper.toPromotionDto(promotion);
     }
 
-    public void testKafka() {
-        BigDecimal decimal = new BigDecimal("21.01");
-        PaymentRequest paymentRequest = paymentRequestBuilder(decimal);
+    private void processPaymentAndVerify(CompletableFuture<PaymentResponse> responseFuture,
+                                         PaymentRequest paymentRequest, Long userId) {
         try {
-            String requestJson = objectMapper.writeValueAsString(paymentRequest);
-            String correlationId = UUID.randomUUID().toString();
-
-            Message<String> requestMessage = MessageBuilder
-                    .withPayload(requestJson)
-                    .setHeader(KafkaHeaders.TOPIC, promotionPaymentRequestTopic)
-                    .setHeader(KafkaHeaders.CORRELATION_ID, correlationId.getBytes(StandardCharsets.UTF_8))
-                    .setHeader(KafkaHeaders.REPLY_TOPIC, promotionPaymentRequestTopic)
-                    .build();
-
-            RequestReplyMessageFuture<String, String> future =
-                    replyingKafkaTemplate.sendAndReceive(requestMessage);
-
-            log.info("Sent message with correlationId: {}", correlationId);
-
-            Message<String> replyMessage = (Message<String>) future.get(10, TimeUnit.SECONDS);
-            String responseJson = replyMessage.getPayload();
-            PaymentResponse paymentResponse = objectMapper.readValue(responseJson, PaymentResponse.class);
-
-            log.info("Received response: {}", paymentResponse);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        } catch (ExecutionException | InterruptedException | TimeoutException e) {
-            throw new RuntimeException(e);
+            PaymentResponse response = responseFuture.get(10, TimeUnit.SECONDS);
+            if (!response.status().equals(PaymentStatus.SUCCESS)) {
+                kafkaEventPublisher.publishEvent(promotionNotificationTopic, createUnsuccessfulPromotionEvent(userId)); // доавбить Listener в NotificationService
+                throw new RuntimeException("Payment failed");
+            }
+            log.info("Payment successful");
+        } catch (TimeoutException e) {
+            log.error("Payment response timeout for requestId: {}", paymentRequest.requestId());
+            kafkaEventPublisher.publishEvent(promotionNotificationTopic, createUnsuccessfulPromotionEvent(userId));
+            throw new RuntimeException("Payment timeout");
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Payment processing failed", e);
+            kafkaEventPublisher.publishEvent(promotionNotificationTopic, createUnsuccessfulPromotionEvent(userId));
+            throw new RuntimeException("Payment error");
         }
     }
 
@@ -127,10 +95,31 @@ public class PromotionService {
     }
 
     private PaymentRequest paymentRequestBuilder(BigDecimal amount) {
+        String requestId = UUID.randomUUID().toString();
+
         return PaymentRequest.builder()
+                .requestId(requestId)
                 .paymentNumber(1)
                 .amount(amount)
                 .currency(Currency.USD)
+                .build();
+    }
+
+    private SuccessPromotionEvent createSuccessPromotionEvent(Long userId, String promotionName) {
+        String message = String.format("Congratulations, you have bought a %s promotion", promotionName);
+
+        return SuccessPromotionEvent.builder()
+                .userId(userId)
+                .message(message)
+                .build();
+    }
+
+    private UnsuccessfulPromotionEvent createUnsuccessfulPromotionEvent(Long userId) {
+        String message = "The payment failed. Repeat the payment operation";
+
+        return UnsuccessfulPromotionEvent.builder()
+                .userId(userId)
+                .message(message)
                 .build();
     }
 }

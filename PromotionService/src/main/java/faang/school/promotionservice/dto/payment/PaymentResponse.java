@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 
 public record PaymentResponse(
         PaymentStatus status,
+        String requestId,
         int verificationCode,
         long paymentNumber,
         BigDecimal amount,
