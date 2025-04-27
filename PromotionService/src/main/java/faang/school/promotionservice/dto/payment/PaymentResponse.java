@@ -1,7 +1,6 @@
 package faang.school.promotionservice.dto.payment;
 
 import faang.school.promotionservice.dto.Currency;
-import faang.school.promotionservice.dto.promotion.PaymentStatus;
 
 import java.math.BigDecimal;
 

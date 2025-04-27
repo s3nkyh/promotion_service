@@ -30,6 +30,11 @@ spring:
     group-id:
       payment-promotion-group-id: "payment-promotion-group"
 
+  scheduler:
+    cron:
+      redis-sync: "0 */1 * * * *"
+      users-to-elastic: "0 */1 * * * *"
+
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.yaml
 
@@ -37,6 +42,15 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+  elasticsearch:
+    uris: http://localhost:9200
+
+  retry:
+    kafka-publisher:
+      max-attempts: 3
+      initial-delay: 1000
+      multiplier: 2
 
 server:
   port: 8079

@@ -49,7 +49,4 @@ public class Promotion {
     @Enumerated(EnumType.STRING)
     @Column(name = "target_type", nullable = false)
     private TargetType targetType;
-
-    @Column(name = "is_unlimited", columnDefinition = "boolean default false")
-    private boolean isUnlimited;
 }

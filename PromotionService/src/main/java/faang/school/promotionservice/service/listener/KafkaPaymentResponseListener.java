@@ -18,10 +18,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class KafkaPaymentResponseListener {
     public static final String FAILED_PARSE_OBJECT = "Failed to parse object";
     private final ObjectMapper objectMapper;
+    private final Object lock = new Object();
     private final Map<String, CompletableFuture<PaymentResponse>> pendingRequests = new ConcurrentHashMap<>();
 
     @KafkaListener(topics = "${spring.kafka.topics.promotion-payment-response}",
-    groupId = "${spring.kafka.group-id.payment-promotion-group-id}")
+            groupId = "${spring.kafka.group-id.payment-promotion-group-id}")
     public void listen(String message) {
         try {
             PaymentResponse response = objectMapper.readValue(message, PaymentResponse.class);
@@ -45,8 +46,10 @@ public class KafkaPaymentResponseListener {
     }
 
     public CompletableFuture<PaymentResponse> registerPendingRequest(String requestId) {
-        CompletableFuture<PaymentResponse> future = new CompletableFuture<>();
-        pendingRequests.put(requestId, future);
-        return future;
+        synchronized (lock) {
+            CompletableFuture<PaymentResponse> future = new CompletableFuture<>();
+            pendingRequests.put(requestId, future);
+            return future;
+        }
     }
 }

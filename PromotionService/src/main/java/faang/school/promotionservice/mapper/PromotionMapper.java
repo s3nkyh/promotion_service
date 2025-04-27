@@ -5,8 +5,9 @@ import faang.school.promotionservice.dto.TargetTypeDto;
 import faang.school.promotionservice.entity.Promotion;
 import faang.school.promotionservice.entity.TargetType;
 import org.mapstruct.Mapper;
+import org.mapstruct.ReportingPolicy;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface PromotionMapper {
 
     PromotionDto toPromotionDto(Promotion promotion);
@@ -22,6 +23,9 @@ public interface PromotionMapper {
     }
 
     default TargetType targetTypeToEntity(TargetTypeDto targetTypeDto) {
+        if (targetTypeDto == null) {
+            return null;
+        }
         return TargetType.valueOf(targetTypeDto.getName());
     }
 }

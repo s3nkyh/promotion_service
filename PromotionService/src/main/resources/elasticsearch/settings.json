@@ -1,0 +1,10 @@
+{
+  "analysis": {
+    "analyzer": {
+      "english": {
+        "type": "standard",
+        "stopwords": "_english_"
+      }
+    }
+  }
+}

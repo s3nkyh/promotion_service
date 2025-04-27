@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -15,6 +18,13 @@ public class KafkaEventPublisher {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
+    @Retryable(
+            maxAttemptsExpression = "${spring.retry.kafka-publisher.max-attempts}",
+            backoff = @Backoff(
+                    delayExpression = "${spring.retry.kafka-publisher.initial-delay}",
+                    multiplierExpression = "${spring.retry.kafka-publisher.multiplier}"
+            )
+    )
     public void publishEvent(String topic, Object object) {
         try {
             String message = objectMapper.writeValueAsString(object);
@@ -24,5 +34,10 @@ public class KafkaEventPublisher {
             throw new RuntimeException(FAILED_SERIALIZING_OBJECT, e);
         }
         log.info("Sent object: {}, to topic: {}", object.getClass().getName(), topic);
+    }
+
+    @Recover
+    public void recover(RuntimeException e, String topic, Object object) {
+        log.error("All retries failed for topic: {}, object: {}", topic, object, e);
     }
 }
