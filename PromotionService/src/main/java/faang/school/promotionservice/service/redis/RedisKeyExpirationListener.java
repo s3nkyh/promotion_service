@@ -19,7 +19,7 @@ public class RedisKeyExpirationListener implements MessageListener {
         String expiredKey = new String(message.getBody());
         if (expiredKey.startsWith(ActivePromotionRedisService.KEY_PREFIX)) {
             Long id = Long.parseLong(expiredKey.replace(ActivePromotionRedisService.KEY_PREFIX, ""));
-            activePromotionRepository.deleteById(id);
+            activePromotionRepository.deleteById(id); // добавить уведомление notification listener
             log.info("Removed active promotion with id {}", id);
             log.info("Deleted expired ActivePromotion with ID: {}", id);
         }
