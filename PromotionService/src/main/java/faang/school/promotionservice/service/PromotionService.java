@@ -106,7 +106,7 @@ public class PromotionService {
 
     public void syncFromRedisToDb() {
         List<ActivePromotionDto> redisPromotions = activePromotionRedisService.findAll();
-        log.info("Found {} promotions in redis", redisPromotions.size());
+        log.info("Found {} promotions in redis rep", redisPromotions.size());
 
         List<CompletableFuture<Void>> updateFutures = redisPromotions.stream()
                 .map(dto -> CompletableFuture.runAsync(
