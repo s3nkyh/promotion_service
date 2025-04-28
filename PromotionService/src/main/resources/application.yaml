@@ -1,0 +1,64 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/promotion_db
+    username: promotion_user
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  kafka:
+    producer:
+      bootstrap-servers: localhost:9092
+      retries: 3
+      enable-idempotence: true
+      acks: -1
+    consumer:
+      isolation-level: read_committed
+      enable-auto-commit: false
+
+    topics:
+      promotion-payment-request: "promotion-payment-request"
+      promotion-payment-response: "promotion-payment-response"
+      promotion-notification-topic: "promotion-notification-topic"
+    group-id:
+      payment-promotion-group-id: "payment-promotion-group"
+
+  scheduler:
+    cron:
+      redis-sync: "0 */1 * * * *"
+      users-to-elastic: "0 */1 * * * *"
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  elasticsearch:
+    uris: http://localhost:9200
+
+  retry:
+    kafka-publisher:
+      max-attempts: 3
+      initial-delay: 1000
+      multiplier: 2
+
+server:
+  port: 8079
+
+payment-service:
+  host: localhost
+  port: 9080
+
+user-service:
+  host: localhost
+  port: 8080
